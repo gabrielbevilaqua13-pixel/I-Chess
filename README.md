@@ -5,8 +5,6 @@ Treinador de xadrez que aprende com as suas próprias partidas.
 **🔗 [Ver o site no ar](https://mestre-interior.onrender.com/)**
 *(o plano gratuito hiberna: o primeiro acesso pode levar alguns segundos)*
 
-![Tela do Mestre Interior](screenshot.png)
-
 O app conecta na sua conta do [Lichess](https://lichess.org/) ou do [Chess.com](https://www.chess.com/), analisa cada lance com o Stockfish (WASM, roda no navegador) e mostra precisão, imprecisões, erros, capivaradas e as lições que se repetem nos seus jogos.
 
 ## Funcionalidades
