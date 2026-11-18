@@ -2,7 +2,7 @@
 
 Treinador de xadrez que aprende com as suas próprias partidas.
 
-**🔗 [Ver o site no ar](https://SEU-LINK.onrender.com)**
+**🔗 [Ver o site no ar](https://mestre-interior.onrender.com/)**
 *(o plano gratuito hiberna: o primeiro acesso pode levar alguns segundos)*
 
 ![Tela do Mestre Interior](screenshot.png)
