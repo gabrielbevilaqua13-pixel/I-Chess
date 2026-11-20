@@ -11,8 +11,18 @@ export type AuthSession = {
   user: AuthUser;
 };
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "");
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+declare global {
+  interface Window {
+    __MESTRE_INTERIOR_CONFIG__?: {
+      supabaseUrl?: string;
+      supabaseAnonKey?: string;
+    };
+  }
+}
+
+const runtimeConfig = typeof window !== "undefined" ? window.__MESTRE_INTERIOR_CONFIG__ : undefined;
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || runtimeConfig?.supabaseUrl)?.replace(/\/$/, "");
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || runtimeConfig?.supabaseAnonKey;
 const SESSION_KEY = "mestre-interior:auth-session";
 
 export const isAuthConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
@@ -125,7 +135,6 @@ export async function getSession(): Promise<AuthSession | null> {
 export function getCurrentUser(): AuthUser | null {
   return getStoredSession()?.user ?? null;
 }
-
 
 /**
  * Restores the implicit-flow session after the user confirms their email.
