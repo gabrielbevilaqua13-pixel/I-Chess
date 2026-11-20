@@ -17,7 +17,5 @@ ENV NODE_ENV=production \
 
 COPY --from=build --chown=node:node /app/.output ./.output
 
-# Vite variables are normally compiled at build time. This app also supports
-# runtime injection so Render Docker services can use dashboard env vars safely.
 USER node
-CMD ["sh", "-c", "node -e 'require(\"fs\").writeFileSync(\".output/public/runtime-config.json\", JSON.stringify({supabaseUrl:process.env.VITE_SUPABASE_URL||\"\",supabaseAnonKey:process.env.VITE_SUPABASE_ANON_KEY||\"\"}))' && exec node .output/server/index.mjs"]
+CMD ["sh", "-c", "node -e 'const fs=require(\"fs\"); const config={supabaseUrl:process.env.VITE_SUPABASE_URL||\"\",supabaseAnonKey:process.env.VITE_SUPABASE_ANON_KEY||\"\"}; fs.writeFileSync(\".output/public/runtime-config.json\", JSON.stringify(config)); console.log(\"[runtime-config] Supabase URL present:\", Boolean(config.supabaseUrl), \"publishable key present:\", Boolean(config.supabaseAnonKey));' && exec node .output/server/index.mjs"]
