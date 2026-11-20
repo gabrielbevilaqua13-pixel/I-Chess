@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as JogadorUsernameRouteImport } from './routes/jogador.$username'
 import { Route as PartidaIdRouteImport } from './routes/partida.$id'
 import { Route as PuzzlesUsernameRouteImport } from './routes/puzzles.$username'
@@ -17,6 +18,11 @@ import { Route as PuzzlesUsernameRouteImport } from './routes/puzzles.$username'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JogadorUsernameRoute = JogadorUsernameRouteImport.update({
@@ -37,6 +43,7 @@ const PuzzlesUsernameRoute = PuzzlesUsernameRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/jogador/$username': typeof JogadorUsernameRoute
   '/partida/$id': typeof PartidaIdRoute
   '/puzzles/$username': typeof PuzzlesUsernameRoute
@@ -56,12 +63,13 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/jogador/$username' | '/partida/$id' | '/puzzles/$username'
+  fullPaths: '/' | '/login' | '/jogador/$username' | '/partida/$id' | '/puzzles/$username'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/jogador/$username' | '/partida/$id' | '/puzzles/$username'
+  to: '/' | '/login' | '/jogador/$username' | '/partida/$id' | '/puzzles/$username'
   id:
     | '__root__'
     | '/'
+    | '/login'
     | '/jogador/$username'
     | '/partida/$id'
     | '/puzzles/$username'
@@ -69,6 +77,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   JogadorUsernameRoute: typeof JogadorUsernameRoute
   PartidaIdRoute: typeof PartidaIdRoute
   PuzzlesUsernameRoute: typeof PuzzlesUsernameRoute
@@ -81,6 +90,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/jogador/$username': {
@@ -109,6 +125,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   JogadorUsernameRoute: JogadorUsernameRoute,
   PartidaIdRoute: PartidaIdRoute,
   PuzzlesUsernameRoute: PuzzlesUsernameRoute,
