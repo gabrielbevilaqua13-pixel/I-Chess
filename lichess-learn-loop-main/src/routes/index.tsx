@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/")({
@@ -34,7 +34,7 @@ function Index() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col justify-center px-6 py-16">
-      <p className="mb-4 text-sm uppercase tracking-[0.3em] text-primary">♞ Mestre Interior</p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4"><p className="text-sm uppercase tracking-[0.3em] text-primary">♞ Mestre Interior</p><Link to="/login" className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold transition hover:bg-accent">Entrar / Criar conta</Link></div>
       <h1 className="max-w-3xl text-5xl font-bold leading-tight md:text-7xl">
         Seu melhor professor são <em className="text-primary">suas próprias partidas.</em>
       </h1>
