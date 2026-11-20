@@ -117,9 +117,15 @@ function Solver({ puzzle, onSolved, onNext, number }: { puzzle: Puzzle; onSolved
     if (status === "done") return false;
     const expected = puzzle.solution[step]!;
     let mv;
-    try { mv = chess.move({ from, to, promotion: "q" }); } catch { return false; }
+    try {
+      // The board callback does not expose a promotion picker; use the
+      // promotion piece encoded in the solution (including underpromotions).
+      mv = chess.move({ from, to, promotion: expected[4] ?? "q" });
+    } catch {
+      return false;
+    }
     const uci = from + to + (mv.promotion ?? "");
-    if (uci !== expected && !(chess.isCheckmate())) {
+    if (uci !== expected) {
       chess.undo();
       setStatus("wrong");
       return false;
