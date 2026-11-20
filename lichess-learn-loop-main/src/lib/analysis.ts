@@ -158,13 +158,18 @@ export async function analyzeGame(
     if (judgment === "inaccuracy" || judgment === "mistake" || judgment === "blunder") {
       const replyMove = after.best ? uciToMove(fens[i + 1]!, after.best) : null;
       const allowsMate = after.mate !== null && sign * after.mate < 0;
+      const hangingAfter = hangingPieces(fens[i + 1]!, color);
+      const replyCapturesHangingPiece =
+        !!replyMove?.captured &&
+        (replyMove.to === m.to ||
+          hangingAfter.some((piece) => piece.sq === replyMove.to && piece.type === replyMove.captured));
+
       if (hadMate && !stillMate) theme = "mate-perdido";
       else if (allowsMate) theme = "mate-permitido";
-      else if (replyMove?.captured && replyMove.to === m.to) theme = "peca-pendurada";
-      else if (replyMove?.captured && replyMove.captured !== "p") theme = "peca-pendurada";
+      else if (replyCapturesHangingPiece) theme = "peca-pendurada";
       else if (bestMove?.captured && !m.captured) theme = "captura-perdida";
       else if (i < 20) theme = "abertura";
-      else if (countMaterial(fens[i]!) <= 6) theme = "final";
+      else if (countMaterial(fens[i + 1]!) <= 6) theme = "final";
       else theme = "posicional";
     }
 
