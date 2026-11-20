@@ -1,8 +1,5 @@
-import { getSession } from "@/lib/auth";
+import { getSession, getSupabaseConfig } from "@/lib/auth";
 import type { StoredGame } from "@/lib/analysis";
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "");
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 function platformFor(username: string): "lichess" | "chesscom" {
   return username.endsWith("@chesscom") ? "chesscom" : "lichess";
@@ -10,9 +7,10 @@ function platformFor(username: string): "lichess" | "chesscom" {
 
 async function requestHeaders() {
   const session = await getSession();
-  if (!session || !SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  const config = getSupabaseConfig();
+  if (!session || !config.url || !config.anonKey) return null;
   return {
-    apikey: SUPABASE_ANON_KEY,
+    apikey: config.anonKey,
     Authorization: "Bearer " + session.access_token,
     "Content-Type": "application/json",
   };
@@ -20,12 +18,13 @@ async function requestHeaders() {
 
 export async function saveCloudStats(username: string, game: StoredGame) {
   const headers = await requestHeaders();
-  if (!headers || !SUPABASE_URL) return false;
+  const config = getSupabaseConfig();
+  if (!headers || !config.url) return false;
   const session = await getSession();
   if (!session) return false;
 
   const response = await fetch(
-    SUPABASE_URL + "/rest/v1/game_analyses?on_conflict=user_id,platform,game_id",
+    config.url + "/rest/v1/game_analyses?on_conflict=user_id,platform,game_id",
     {
       method: "POST",
       headers: { ...headers, Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -49,7 +48,8 @@ export async function saveCloudStats(username: string, game: StoredGame) {
 
 export async function loadCloudStats(username: string): Promise<StoredGame[]> {
   const headers = await requestHeaders();
-  if (!headers || !SUPABASE_URL) return [];
+  const config = getSupabaseConfig();
+  if (!headers || !config.url) return [];
   const platform = platformFor(username);
   const externalUsername = username.replace(/@chesscom$/, "");
   const params = new URLSearchParams({
@@ -59,7 +59,7 @@ export async function loadCloudStats(username: string): Promise<StoredGame[]> {
     order: "analyzed_at.desc",
     limit: "100",
   });
-  const response = await fetch(SUPABASE_URL + "/rest/v1/game_analyses?" + params, { headers });
+  const response = await fetch(config.url + "/rest/v1/game_analyses?" + params, { headers });
   if (!response.ok) {
     const detail = await response.text();
     throw new Error("Não foi possível carregar seu histórico: " + detail);
