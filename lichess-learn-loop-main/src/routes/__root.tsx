@@ -8,7 +8,8 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
+import { restoreSessionFromUrl } from "@/lib/auth";
 
 import appCss from "../styles.css?url";
 
@@ -117,6 +118,10 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    void restoreSessionFromUrl();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
