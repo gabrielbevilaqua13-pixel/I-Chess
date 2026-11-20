@@ -21,8 +21,46 @@ declare global {
 }
 
 type SupabaseConfig = { supabaseUrl?: string; supabaseAnonKey?: string };
+type AuthPayload = Record<string, unknown> & {
+  access_token?: string;
+  refresh_token?: string;
+  expires_at?: number;
+  expires_in?: number;
+  user?: AuthUser;
+};
+class AuthApiError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+    this.name = "AuthApiError";
+  }
+}
 let runtimeConfig: SupabaseConfig = typeof window !== "undefined" ? (window.__MESTRE_INTERIOR_CONFIG__ ?? {}) : {};
 let configPromise: Promise<boolean> | null = null;
+let refreshPromise: Promise<AuthSession | null> | null = null;
+
+function getExpiresAt(payload: AuthPayload): number | undefined {
+  const explicit = Number(payload.expires_at);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+
+  const duration = Number(payload.expires_in);
+  if (Number.isFinite(duration) && duration > 0) return Math.floor(Date.now() / 1000) + duration;
+
+  const token = payload.access_token;
+  if (typeof token === "string") {
+    try {
+      const encoded = token.split(".")[1];
+      if (encoded) {
+        const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
+        const claims = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")));
+        const expiry = Number(claims.exp);
+        if (Number.isFinite(expiry) && expiry > 0) return expiry;
+      }
+    } catch {
+      // Fall through; the token will be refreshed conservatively if no expiry is available.
+    }
+  }
+  return undefined;
+}
 const SESSION_KEY = "mestre-interior:auth-session";
 
 export function getSupabaseConfig() {
@@ -76,9 +114,9 @@ async function authRequest(path: string, body: Record<string, unknown>) {
       : typeof payload.message === "string" ? payload.message
       : typeof payload.error_description === "string" ? payload.error_description
       : "Não foi possível concluir a autenticação.";
-    throw new Error(message);
+    throw new AuthApiError(message, response.status, typeof payload.error === "string" ? payload.error : typeof payload.code === "string" ? payload.code : undefined);
   }
-  return payload;
+  return payload as AuthPayload;
 }
 
 export async function signUp(email: string, password: string) {
@@ -93,7 +131,7 @@ export async function signUp(email: string, password: string) {
     storeSession({
       access_token: payload.access_token,
       refresh_token: payload.refresh_token,
-      expires_at: payload.expires_at,
+      expires_at: getExpiresAt(payload),
       user: payload.user,
     });
   }
@@ -105,7 +143,7 @@ export async function signIn(email: string, password: string) {
   const session: AuthSession = {
     access_token: payload.access_token,
     refresh_token: payload.refresh_token,
-    expires_at: payload.expires_at,
+    expires_at: getExpiresAt(payload),
     user: payload.user,
   };
   storeSession(session);
@@ -127,24 +165,40 @@ export async function getSession(): Promise<AuthSession | null> {
   const session = getStoredSession();
   if (!session) return null;
   if (session.expires_at && session.expires_at * 1000 > Date.now() + 60_000) return session;
-  if (!isAuthConfigured()) return session;
+  if (!isAuthConfigured()) return null;
 
-  try {
-    const payload = await authRequest("token?grant_type=refresh_token", {
-      refresh_token: session.refresh_token,
-    });
-    const refreshed: AuthSession = {
-      access_token: payload.access_token,
-      refresh_token: payload.refresh_token,
-      expires_at: payload.expires_at,
-      user: payload.user,
-    };
-    storeSession(refreshed);
-    return refreshed;
-  } catch {
-    storeSession(null);
-    return null;
-  }
+  // Refresh tokens are single-use. Serialize concurrent refresh attempts so
+  // multiple components cannot rotate the same token at the same time.
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    try {
+      const payload = await authRequest("token?grant_type=refresh_token", {
+        refresh_token: session.refresh_token,
+      });
+      if (!payload.access_token || !payload.refresh_token || !payload.user) {
+        throw new Error("Resposta de renovação de sessão inválida.");
+      }
+      const refreshed: AuthSession = {
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token,
+        expires_at: getExpiresAt(payload),
+        user: payload.user,
+      };
+      storeSession(refreshed);
+      return refreshed;
+    } catch (error) {
+      // Only discard the local session when Auth explicitly rejects the
+      // refresh token. Network, rate-limit and server failures are retryable.
+      if (error instanceof AuthApiError && error.status >= 400 && error.status < 500 && error.status !== 429) {
+        storeSession(null);
+      }
+      console.warn("Não foi possível renovar a sessão neste momento.", error);
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
 }
 
 export function getCurrentUser(): AuthUser | null {
