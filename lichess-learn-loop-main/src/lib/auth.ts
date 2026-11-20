@@ -140,6 +140,9 @@ export async function signUp(email: string, password: string) {
 
 export async function signIn(email: string, password: string) {
   const payload = await authRequest("token?grant_type=password", { email, password });
+  if (!payload.access_token || !payload.refresh_token || !payload.user) {
+    throw new Error("O Supabase não retornou uma sessão válida.");
+  }
   const session: AuthSession = {
     access_token: payload.access_token,
     refresh_token: payload.refresh_token,
