@@ -44,5 +44,10 @@ create policy "Players can delete their own analyses"
   to authenticated
   using (auth.uid() = user_id);
 
+-- Revoke the default broad table privileges. RLS does not protect TRUNCATE,
+-- so the anon role must not retain table-level privileges.
+revoke all on table public.game_analyses from anon, authenticated, public;
+revoke all on sequence public.game_analyses_id_seq from anon, authenticated, public;
+
 grant select, insert, update, delete on public.game_analyses to authenticated;
 grant usage, select on sequence public.game_analyses_id_seq to authenticated;
