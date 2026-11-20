@@ -58,6 +58,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/jogador/$username': typeof JogadorUsernameRoute
   '/partida/$id': typeof PartidaIdRoute
   '/puzzles/$username': typeof PuzzlesUsernameRoute
