@@ -23,10 +23,27 @@ function Player() {
   const [stats, setStats] = useState<StoredGame[]>([]);
   useEffect(() => setStats(loadStats(username)), [username]);
 
+  const orderedStats = [...stats].sort((a, b) => b.date - a.date);
+  const recentStats = orderedStats.slice(0, 5);
+  const previousStats = orderedStats.slice(5, 10);
+  const average = (items: StoredGame[]) =>
+    items.length ? items.reduce((sum, game) => sum + game.accuracy, 0) / items.length : null;
+  const recentAvg = average(recentStats);
+  const previousAvg = average(previousStats);
+  const accuracyDelta = recentAvg !== null && previousAvg !== null ? recentAvg - previousAvg : null;
+
   const themeTotals: Partial<Record<ErrorTheme, number>> = {};
-  stats.forEach((g) => Object.entries(g.themes).forEach(([k, v]) => (themeTotals[k as ErrorTheme] = (themeTotals[k as ErrorTheme] ?? 0) + (v ?? 0))));
-  const topThemes = Object.entries(themeTotals).sort((a, b) => b[1] - a[1]).slice(0, 3) as [ErrorTheme, number][];
-  const avgAcc = stats.length ? stats.reduce((s, g) => s + g.accuracy, 0) / stats.length : null;
+  const themeGames: Partial<Record<ErrorTheme, number>> = {};
+  orderedStats.forEach((game) => {
+    Object.entries(game.themes).forEach(([key, value]) => {
+      const theme = key as ErrorTheme;
+      themeTotals[theme] = (themeTotals[theme] ?? 0) + (value ?? 0);
+      if ((value ?? 0) > 0) themeGames[theme] = (themeGames[theme] ?? 0) + 1;
+    });
+  });
+  const topThemes = Object.entries(themeTotals)
+    .sort((a, b) => (themeGames[b[0] as ErrorTheme] ?? 0) - (themeGames[a[0] as ErrorTheme] ?? 0) || b[1] - a[1])
+    .slice(0, 3) as [ErrorTheme, number][];
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -50,21 +67,60 @@ function Player() {
           </header>
 
           {stats.length > 0 && (
-            <section className="mt-8 rounded-lg border border-border bg-card p-6">
+            <>
+              <section className="mt-8 rounded-lg border border-border bg-card p-6">
+                <h2 className="text-2xl">Sua evolução</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Comparação das até 5 análises mais recentes com as 5 anteriores.
+                </p>
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-md bg-muted p-4">
+                    <p className="text-sm text-muted-foreground">Últimas partidas</p>
+                    <p className="mt-1 text-3xl font-semibold text-primary">
+                      {recentAvg !== null ? `${recentAvg.toFixed(1)}%` : "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{recentStats.length} analisada(s)</p>
+                  </div>
+                  <div className="rounded-md bg-muted p-4">
+                    <p className="text-sm text-muted-foreground">Período anterior</p>
+                    <p className="mt-1 text-3xl font-semibold">
+                      {previousAvg !== null ? `${previousAvg.toFixed(1)}%` : "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{previousStats.length} analisada(s)</p>
+                  </div>
+                  <div className="rounded-md bg-muted p-4">
+                    <p className="text-sm text-muted-foreground">Variação</p>
+                    <p className={`mt-1 text-3xl font-semibold ${accuracyDelta === null ? "text-muted-foreground" : accuracyDelta >= 0 ? "text-best" : "text-blunder"}`}>
+                      {accuracyDelta === null ? "—" : `${accuracyDelta > 0 ? "+" : ""}${accuracyDelta.toFixed(1)} p.p.`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {accuracyDelta === null ? "Analise mais partidas para comparar" : accuracyDelta >= 0 ? "Evolução na precisão média" : "Queda na precisão média"}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  A precisão é uma estimativa do Stockfish e pode variar conforme a profundidade da análise. A comparação só aparece quando há dois períodos.
+                </p>
+              </section>
+
+              <section className="mt-8 rounded-lg border border-border bg-card p-6">
               <h2 className="text-2xl">Seus padrões</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Com base em {stats.length} partida(s) analisada(s) · precisão média{" "}
-                <b className="text-primary">{avgAcc?.toFixed(1)}%</b>
+                Com base em {stats.length} partida(s) analisada(s). Os temas abaixo indicam em quantas partidas cada dificuldade apareceu.
               </p>
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 {topThemes.map(([t, n]) => (
                   <div key={t} className="rounded-md bg-muted p-4">
-                    <p className="font-semibold text-mistake">{THEME_LABEL[t]} <span className="text-muted-foreground">×{n}</span></p>
+                    <p className="font-semibold text-mistake">{THEME_LABEL[t]}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {themeGames[t] ?? 0} de {stats.length} partidas · {n} ocorrência(s)
+                    </p>
                     <p className="mt-2 text-sm text-muted-foreground">{THEME_ADVICE[t]}</p>
                   </div>
                 ))}
               </div>
-            </section>
+              </section>
+            </>
           )}
 
           <h2 className="mt-10 text-2xl">Partidas recentes</h2>
