@@ -125,3 +125,37 @@ export async function getSession(): Promise<AuthSession | null> {
 export function getCurrentUser(): AuthUser | null {
   return getStoredSession()?.user ?? null;
 }
+
+
+/**
+ * Restores the implicit-flow session after the user confirms their email.
+ * Supabase redirects back to the configured Site URL with tokens in the URL fragment.
+ */
+export async function restoreSessionFromUrl(): Promise<boolean> {
+  if (typeof window === "undefined" || !isAuthConfigured) return false;
+  const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const accessToken = fragment.get("access_token");
+  const refreshToken = fragment.get("refresh_token");
+  if (!accessToken || !refreshToken) return false;
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: "GET",
+      headers: headers(accessToken),
+    });
+    if (!response.ok) throw new Error("Não foi possível validar a confirmação do e-mail.");
+    const user = await response.json() as AuthUser;
+    const expiresIn = Number(fragment.get("expires_in") ?? 3600);
+    storeSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_at: Math.floor(Date.now() / 1000) + expiresIn,
+      user,
+    });
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    return true;
+  } catch (error) {
+    console.error("Falha ao restaurar a sessão após confirmação de e-mail.", error);
+    return false;
+  }
+}
