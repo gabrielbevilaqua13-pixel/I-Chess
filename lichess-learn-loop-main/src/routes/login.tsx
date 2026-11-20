@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { isAuthConfigured, signIn, signUp, getSession, signOut } from "@/lib/auth";
+import { initializeAuthConfig, isAuthConfigured, signIn, signUp, getSession, signOut } from "@/lib/auth";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -20,10 +20,12 @@ function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [authConfigured, setAuthConfigured] = useState(false);
 
   useEffect(() => {
-    getSession().then((session) => {
-      if (session) setMessage(`Você já está conectado como ${session.user.email ?? "jogador"}.`);
+    initializeAuthConfig().then((configured) => {
+      setAuthConfigured(configured && isAuthConfigured());
+      if (configured) getSession().then((session) => { if (session) setMessage(`Você já está conectado como ${session.user.email ?? "jogador"}.`); });
     });
   }, []);
 
@@ -68,7 +70,7 @@ function LoginPage() {
           Guarde suas análises e acompanhe sua evolução partida após partida.
         </p>
 
-        {!isAuthConfigured && (
+        {!authConfigured && (
           <div className="mt-6 rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm">
             <b className="text-primary">Configuração necessária</b>
             <p className="mt-1 text-muted-foreground">
@@ -91,7 +93,7 @@ function LoginPage() {
             Senha
             <input type="password" required minLength={8} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 8 caracteres" className="mt-2 w-full rounded-md border border-input bg-background px-3 py-3 outline-none focus:ring-2 focus:ring-ring" />
           </label>
-          <button disabled={busy || !isAuthConfigured} className="w-full rounded-md bg-primary px-5 py-3 font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+          <button disabled={busy || !authConfigured} className="w-full rounded-md bg-primary px-5 py-3 font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
             {busy ? "Aguarde…" : mode === "signin" ? "Entrar" : "Criar minha conta"}
           </button>
         </form>
