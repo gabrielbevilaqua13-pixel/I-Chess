@@ -9,7 +9,7 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
-import { restoreSessionFromUrl } from "@/lib/auth";
+import { initializeAuthConfig, restoreSessionFromUrl } from "@/lib/auth";
 
 import appCss from "../styles.css?url";
 
@@ -121,7 +121,7 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   useEffect(() => {
-    void restoreSessionFromUrl();
+    void initializeAuthConfig().then(() => restoreSessionFromUrl());
   }, []);
 
   return (
