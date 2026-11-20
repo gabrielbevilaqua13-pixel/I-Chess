@@ -92,6 +92,16 @@ function countMaterial(fen: string) {
   return n;
 }
 
+function isOpeningPosition(fen: string, ply: number) {
+  const board = fen.split(" ")[0] ?? "";
+  return ply <= 20 && board.includes("q") && board.includes("Q") && countMaterial(fen) >= 10;
+}
+
+function isEndgamePosition(fen: string) {
+  const board = fen.split(" ")[0] ?? "";
+  return (!board.includes("q") && !board.includes("Q")) || countMaterial(fen) <= 6;
+}
+
 function classify(drop: number): Judgment {
   if (drop >= 30) return "blunder";
   if (drop >= 20) return "mistake";
@@ -168,8 +178,9 @@ export async function analyzeGame(
       else if (allowsMate) theme = "mate-permitido";
       else if (replyCapturesHangingPiece) theme = "peca-pendurada";
       else if (bestMove?.captured && !m.captured) theme = "captura-perdida";
-      else if (i < 20) theme = "abertura";
-      else if (countMaterial(fens[i + 1]!) <= 6) theme = "final";
+      else if (replyMove?.san.includes("+")) theme = "posicional";
+      else if (isEndgamePosition(fens[i + 1]!)) theme = "final";
+      else if (isOpeningPosition(fens[i + 1]!, i + 1)) theme = "abertura";
       else theme = "posicional";
     }
 
