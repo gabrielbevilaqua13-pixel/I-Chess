@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { getSession, initializeAuthConfig, restoreSessionFromUrl, signOut, type AuthSession } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -16,7 +17,32 @@ export const Route = createFileRoute("/")({
 function Index() {
   const [user, setUser] = useState("");
   const [platform, setPlatform] = useState<"lichess" | "chesscom">("lichess");
+  const [session, setSession] = useState<AuthSession | null>(null);
   const navigate = useNavigate();
+  useEffect(() => {
+    let active = true;
+
+    const loadSession = async () => {
+      await initializeAuthConfig();
+      await restoreSessionFromUrl();
+      const currentSession = await getSession();
+      if (active) setSession(currentSession);
+    };
+
+    void loadSession().catch((error) => {
+      console.error("Não foi possível restaurar a sessão do usuário.", error);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    await signOut();
+    setSession(null);
+  };
+
   useEffect(() => {
     const saved = localStorage.getItem("xadrez-coach:user");
     if (saved?.endsWith("@chesscom")) { setPlatform("chesscom"); setUser(saved.slice(0, -9)); }
@@ -34,7 +60,27 @@ function Index() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col justify-center px-6 py-16">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-4"><p className="text-sm uppercase tracking-[0.3em] text-primary">♞ Mestre Interior</p><Link to="/login" className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold transition hover:bg-accent">Entrar / Criar conta</Link></div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <p className="text-sm uppercase tracking-[0.3em] text-primary">♞ Mestre Interior</p>
+        {session ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              Conta conectada{session.user.email ? `: ${session.user.email}` : ""}
+            </span>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold transition hover:bg-accent"
+            >
+              Sair
+            </button>
+          </div>
+        ) : (
+          <Link to="/login" className="rounded-md border border-border bg-card px-4 py-2 text-sm font-semibold transition hover:bg-accent">
+            Entrar / Criar conta
+          </Link>
+        )}
+      </div>
       <h1 className="max-w-3xl text-5xl font-bold leading-tight md:text-7xl">
         Seu melhor professor são <em className="text-primary">suas próprias partidas.</em>
       </h1>
