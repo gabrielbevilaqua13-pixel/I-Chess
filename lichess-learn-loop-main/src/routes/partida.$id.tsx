@@ -134,7 +134,18 @@ function GamePage() {
   const sumMe = useMemo(() => (moves ? summarize(moves, myColor) : null), [moves, myColor]);
   const sumOpp = useMemo(() => (moves ? summarize(moves, myColor === "w" ? "b" : "w") : null), [moves, myColor]);
   const myErrors = moves?.filter((m) => m.color === myColor && m.theme) ?? [];
-  const myThemes = [...new Set(myErrors.map((m) => m.theme!))];
+  const judgmentWeight: Record<Judgment, number> = {
+    best: 0, good: 0, inaccuracy: 1, mistake: 2, blunder: 3,
+  };
+  const themeInsights = [...new Set(myErrors.map((m) => m.theme!))]
+    .map((theme) => {
+      const related = myErrors.filter((m) => m.theme === theme);
+      const example = [...related].sort(
+        (a, b) => judgmentWeight[b.judgment] - judgmentWeight[a.judgment] || b.winDrop - a.winDrop,
+      )[0]!;
+      return { theme, related, example, count: related.length };
+    })
+    .sort((a, b) => b.count - a.count || judgmentWeight[b.example.judgment] - judgmentWeight[a.example.judgment]);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
@@ -252,35 +263,46 @@ function GamePage() {
                     })}
                   </div>
 
-                  {myThemes.length > 0 && (
-                    <div className="mt-4 rounded-lg border border-border bg-card p-5">
-                      <h2 className="text-xl">Lições desta partida</h2>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Recomendações geradas a partir dos lances identificados nesta análise.
-                      </p>
-                      <ul className="mt-3 space-y-4">
-                        {myThemes.map((t) => {
-                          const relatedErrors = myErrors.filter((m) => m.theme === t);
-                          const example = relatedErrors[0]!;
-                          return (
-                            <li key={t} className="text-sm">
+                  {themeInsights.length > 0 && (
+                    <>
+                      <div className="mt-4 rounded-lg border border-primary/40 bg-card p-5">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-primary">Diagnóstico desta partida</p>
+                        <h2 className="mt-1 text-xl">Seu principal ponto de atenção</h2>
+                        <p className="mt-2 text-sm">
+                          <b>{THEME_LABEL[themeInsights[0]!.theme]}</b> — {themeInsights[0]!.count} {themeInsights[0]!.count === 1 ? "ocorrência identificada" : "ocorrências identificadas"}.
+                        </p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {avoidAdvice(themeInsights[0]!.example) ?? THEME_ADVICE[themeInsights[0]!.theme]}
+                        </p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Exemplo mais relevante: lance {Math.ceil(themeInsights[0]!.example.ply / 2)}{themeInsights[0]!.example.color === "w" ? "." : "..."} {themeInsights[0]!.example.san} ({J_LABEL[themeInsights[0]!.example.judgment].toLowerCase()}).
+                        </p>
+                      </div>
+                      <div className="mt-4 rounded-lg border border-border bg-card p-5">
+                        <h2 className="text-xl">Lições desta partida</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Categorias ordenadas pela frequência nesta partida. Para confirmar hábitos recorrentes, compare várias partidas.
+                        </p>
+                        <ul className="mt-3 space-y-4">
+                          {themeInsights.map(({ theme, related, example, count }) => (
+                            <li key={theme} className="text-sm">
                               <div className="flex flex-wrap items-center gap-2">
-                                <b className="text-mistake">{THEME_LABEL[t]}</b>
+                                <b className="text-mistake">{THEME_LABEL[theme]}</b>
                                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                                  {relatedErrors.length} {relatedErrors.length === 1 ? "ocorrência" : "ocorrências"}
+                                  {count} {count === 1 ? "ocorrência" : "ocorrências"}
                                 </span>
                               </div>
                               <p className="mt-2 text-muted-foreground">
-                                {avoidAdvice(example) ?? THEME_ADVICE[t]}
+                                {avoidAdvice(example) ?? THEME_ADVICE[theme]}
                               </p>
                               <p className="mt-2 text-xs text-muted-foreground">
-                                Exemplo observado: lance {Math.ceil(example.ply / 2)}{example.color === "w" ? "." : "..."} {example.san}.
+                                Exemplo: lance {Math.ceil(example.ply / 2)}{example.color === "w" ? "." : "..."} {example.san}; {related.filter((m) => m.judgment === "blunder").length} capivarada(s), {related.filter((m) => m.judgment === "mistake").length} erro(s) e {related.filter((m) => m.judgment === "inaccuracy").length} imprecisão(ões).
                               </p>
                             </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
+                          ))}
+                        </ul>
+                      </div>
+                    </>
                   )}
 
                   <div className="mt-4 max-h-[420px] overflow-y-auto rounded-lg border border-border bg-card p-3">
