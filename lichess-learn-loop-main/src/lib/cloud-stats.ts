@@ -10,18 +10,20 @@ async function requestHeaders() {
   const config = getSupabaseConfig();
   if (!session || !config.url || !config.anonKey) return null;
   return {
-    apikey: config.anonKey,
-    Authorization: "Bearer " + session.access_token,
-    "Content-Type": "application/json",
+    session,
+    headers: {
+      apikey: config.anonKey,
+      Authorization: "Bearer " + session.access_token,
+      "Content-Type": "application/json",
+    },
   };
 }
 
 export async function saveCloudStats(username: string, game: StoredGame) {
-  const headers = await requestHeaders();
+  const auth = await requestHeaders();
   const config = getSupabaseConfig();
-  if (!headers || !config.url) return false;
-  const session = await getSession();
-  if (!session) return false;
+  if (!auth || !config.url) return false;
+  const { session, headers } = auth;
 
   const response = await fetch(
     config.url + "/rest/v1/game_analyses?on_conflict=user_id,platform,game_id",
@@ -47,9 +49,10 @@ export async function saveCloudStats(username: string, game: StoredGame) {
 }
 
 export async function loadCloudStats(username: string): Promise<StoredGame[]> {
-  const headers = await requestHeaders();
+  const auth = await requestHeaders();
   const config = getSupabaseConfig();
-  if (!headers || !config.url) return [];
+  if (!auth || !config.url) return [];
+  const { headers } = auth;
   const platform = platformFor(username);
   const externalUsername = username.replace(/@chesscom$/, "");
   const params = new URLSearchParams({
