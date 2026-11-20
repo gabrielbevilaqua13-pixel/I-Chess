@@ -82,7 +82,13 @@ async function authRequest(path: string, body: Record<string, unknown>) {
 }
 
 export async function signUp(email: string, password: string) {
-  const payload = await authRequest("signup", { email, password });
+  // Explicitly send confirmation emails back to the current site origin.
+  // This avoids Supabase falling back to a stale localhost Site URL.
+  const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/` : undefined;
+  const signupPath = redirectTo
+    ? `signup?redirect_to=${encodeURIComponent(redirectTo)}`
+    : "signup";
+  const payload = await authRequest(signupPath, { email, password });
   if (payload.access_token && payload.refresh_token && payload.user) {
     storeSession({
       access_token: payload.access_token,
