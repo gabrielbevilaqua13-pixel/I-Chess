@@ -20,19 +20,19 @@ declare global {
   }
 }
 
-const runtimeConfig = typeof window !== "undefined" ? window.__MESTRE_INTERIOR_CONFIG__ : undefined;
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL || runtimeConfig?.supabaseUrl)?.replace(/\/$/, "");
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || runtimeConfig?.supabaseAnonKey;
+type SupabaseConfig = { supabaseUrl?: string; supabaseAnonKey?: string };
+let runtimeConfig: SupabaseConfig = typeof window !== "undefined" ? (window.__MESTRE_INTERIOR_CONFIG__ ?? {}) : {};
+let configPromise: Promise<boolean> | null = null;
 const SESSION_KEY = "mestre-interior:auth-session";
 
-export const isAuthConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-
-function headers(token?: string): HeadersInit {
-  return {
-    "Content-Type": "application/json",
-    apikey: SUPABASE_ANON_KEY ?? "",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+export function getSupabaseConfig() {
+  return { url: (import.meta.env.VITE_SUPABASE_URL || runtimeConfig.supabaseUrl || "").replace(/\/$/, ""), anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || runtimeConfig.supabaseAnonKey || "" };
+}
+export function isAuthConfigured() { const c = getSupabaseConfig(); return Boolean(c.url && c.anonKey); }
+export function initializeAuthConfig(): Promise<boolean> {
+  if (isAuthConfigured()) return Promise.resolve(true);
+  if (!configPromise) configPromise = fetch("/runtime-config.json", { cache: "no-store" }).then(async r => { if (!r.ok) throw new Error("Configuração indisponível."); runtimeConfig = await r.json() as SupabaseConfig; if (typeof window !== "undefined") window.__MESTRE_INTERIOR_CONFIG__ = runtimeConfig; return isAuthConfigured(); }).catch(e => { console.error("Falha ao carregar configuração Supabase.", e); return false; });
+  return configPromise;
 }
 
 function getStoredSession(): AuthSession | null {
@@ -55,8 +55,9 @@ function storeSession(session: AuthSession | null) {
 }
 
 async function authRequest(path: string, body: Record<string, unknown>) {
-  if (!isAuthConfigured) throw new Error("O sistema de contas ainda não foi configurado.");
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/${path}`, {
+  const config = getSupabaseConfig();
+  if (!isAuthConfigured()) throw new Error("O sistema de contas ainda não foi configurado.");
+  const response = await fetch(`${config.url}/auth/v1/${path}`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(body),
@@ -99,8 +100,8 @@ export async function signIn(email: string, password: string) {
 
 export async function signOut() {
   const session = getStoredSession();
-  if (session && isAuthConfigured) {
-    await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+  if (session && isAuthConfigured()) {
+    await fetch(`${getSupabaseConfig().url}/auth/v1/logout`, {
       method: "POST",
       headers: headers(session.access_token),
     }).catch(() => undefined);
@@ -112,7 +113,7 @@ export async function getSession(): Promise<AuthSession | null> {
   const session = getStoredSession();
   if (!session) return null;
   if (session.expires_at && session.expires_at * 1000 > Date.now() + 60_000) return session;
-  if (!isAuthConfigured) return session;
+  if (!isAuthConfigured()) return session;
 
   try {
     const payload = await authRequest("token?grant_type=refresh_token", {
@@ -141,14 +142,14 @@ export function getCurrentUser(): AuthUser | null {
  * Supabase redirects back to the configured Site URL with tokens in the URL fragment.
  */
 export async function restoreSessionFromUrl(): Promise<boolean> {
-  if (typeof window === "undefined" || !isAuthConfigured) return false;
+  if (typeof window === "undefined" || !isAuthConfigured()) return false;
   const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const accessToken = fragment.get("access_token");
   const refreshToken = fragment.get("refresh_token");
   if (!accessToken || !refreshToken) return false;
 
   try {
-    const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    const response = await fetch(`${getSupabaseConfig().url}/auth/v1/user`, {
       method: "GET",
       headers: headers(accessToken),
     });
