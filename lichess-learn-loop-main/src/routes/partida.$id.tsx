@@ -17,6 +17,7 @@ import {
   type Judgment,
 } from "@/lib/analysis";
 import { Board } from "@/components/Board";
+import { saveCloudStats } from "@/lib/cloud-stats";
 
 export const Route = createFileRoute("/partida/$id")({
   validateSearch: z.object({ user: z.string().optional() }),
@@ -83,7 +84,11 @@ function GamePage() {
         const themes: Partial<Record<ErrorTheme, number>> = {};
         res.filter((m) => m.color === myColor && m.theme).forEach((m) => (themes[m.theme!] = (themes[m.theme!] ?? 0) + 1));
         savePuzzles(user, buildPuzzles(res, myColor, id));
-        saveGameStats(user, { id, accuracy: summarize(res, myColor).accuracy, themes, date: Date.now() });
+        const storedGame = { id, accuracy: summarize(res, myColor).accuracy, themes, date: Date.now() };
+        saveGameStats(user, storedGame);
+        saveCloudStats(user, storedGame).catch((error) =>
+          console.warn("A análise foi mantida neste dispositivo, mas não sincronizou com a nuvem.", error),
+        );
       }
     } finally {
       engine.terminate();
