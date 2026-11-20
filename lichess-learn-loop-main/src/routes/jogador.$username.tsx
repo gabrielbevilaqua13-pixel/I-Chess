@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { bareName, fetchGames, fetchUser, SPEED_PT } from "@/lib/lichess";
 import { loadStats, THEME_ADVICE, THEME_LABEL, type ErrorTheme, type StoredGame } from "@/lib/analysis";
+import { loadCloudStats } from "@/lib/cloud-stats";
 
 export const Route = createFileRoute("/jogador/$username")({
   head: ({ params }) => ({
@@ -21,7 +22,19 @@ function Player() {
   const userQ = useQuery({ queryKey: ["user", username], queryFn: () => fetchUser(username) });
   const gamesQ = useQuery({ queryKey: ["games", username], queryFn: () => fetchGames(username) });
   const [stats, setStats] = useState<StoredGame[]>([]);
-  useEffect(() => setStats(loadStats(username)), [username]);
+  useEffect(() => {
+    let active = true;
+    const localStats = loadStats(username);
+    setStats(localStats);
+    loadCloudStats(username)
+      .then((cloudStats) => {
+        if (!active || cloudStats.length === 0) return;
+        const merged = new Map([...cloudStats, ...localStats].map((game) => [game.id, game]));
+        setStats([...merged.values()].sort((a, b) => b.date - a.date));
+      })
+      .catch((error) => console.warn("Não foi possível sincronizar o histórico na nuvem.", error));
+    return () => { active = false; };
+  }, [username]);
 
   const orderedStats = [...stats].sort((a, b) => b.date - a.date);
   const recentStats = orderedStats.slice(0, 5);
