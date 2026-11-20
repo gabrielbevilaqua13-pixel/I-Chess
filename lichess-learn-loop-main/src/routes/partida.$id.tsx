@@ -255,14 +255,30 @@ function GamePage() {
                   {myThemes.length > 0 && (
                     <div className="mt-4 rounded-lg border border-border bg-card p-5">
                       <h2 className="text-xl">Lições desta partida</h2>
-                      <ul className="mt-3 space-y-3">
-                        {myThemes.map((t) => (
-                          <li key={t} className="text-sm">
-                            <b className="text-mistake">{THEME_LABEL[t]}</b>{" "}
-                            <span className="text-muted-foreground">({myErrors.filter((m) => m.theme === t).length}x)</span>
-                            <p className="mt-1 text-muted-foreground">{THEME_ADVICE[t]}</p>
-                          </li>
-                        ))}
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Recomendações geradas a partir dos lances identificados nesta análise.
+                      </p>
+                      <ul className="mt-3 space-y-4">
+                        {myThemes.map((t) => {
+                          const relatedErrors = myErrors.filter((m) => m.theme === t);
+                          const example = relatedErrors[0]!;
+                          return (
+                            <li key={t} className="text-sm">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <b className="text-mistake">{THEME_LABEL[t]}</b>
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                  {relatedErrors.length} {relatedErrors.length === 1 ? "ocorrência" : "ocorrências"}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-muted-foreground">
+                                {avoidAdvice(example) ?? THEME_ADVICE[t]}
+                              </p>
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                Exemplo observado: lance {Math.ceil(example.ply / 2)}{example.color === "w" ? "." : "..."} {example.san}.
+                              </p>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   )}
