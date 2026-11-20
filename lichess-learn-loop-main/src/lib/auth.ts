@@ -35,6 +35,14 @@ export function initializeAuthConfig(): Promise<boolean> {
   return configPromise;
 }
 
+function headers(token?: string): HeadersInit {
+  return {
+    "Content-Type": "application/json",
+    apikey: getSupabaseConfig().anonKey,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 function getStoredSession(): AuthSession | null {
   if (typeof window === "undefined") return null;
   try {
