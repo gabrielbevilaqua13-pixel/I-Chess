@@ -31,7 +31,7 @@ export function getSupabaseConfig() {
 export function isAuthConfigured() { const c = getSupabaseConfig(); return Boolean(c.url && c.anonKey); }
 export function initializeAuthConfig(): Promise<boolean> {
   if (isAuthConfigured()) return Promise.resolve(true);
-  if (!configPromise) configPromise = fetch("/runtime-config.json", { cache: "no-store" }).then(async r => { if (!r.ok) throw new Error("Configuração indisponível."); runtimeConfig = await r.json() as SupabaseConfig; if (typeof window !== "undefined") window.__MESTRE_INTERIOR_CONFIG__ = runtimeConfig; return isAuthConfigured(); }).catch(e => { console.error("Falha ao carregar configuração Supabase.", e); return false; });
+  if (!configPromise) configPromise = fetch("/api/runtime-config", { cache: "no-store" }).then(async r => { if (!r.ok) throw new Error("Configuração indisponível."); runtimeConfig = await r.json() as SupabaseConfig; if (typeof window !== "undefined") window.__MESTRE_INTERIOR_CONFIG__ = runtimeConfig; return isAuthConfigured(); }).catch(e => { console.error("Falha ao carregar configuração Supabase.", e); return false; });
   return configPromise;
 }
 
