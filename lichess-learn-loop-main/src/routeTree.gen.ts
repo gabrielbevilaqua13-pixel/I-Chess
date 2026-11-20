@@ -50,6 +50,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/jogador/$username': typeof JogadorUsernameRoute
   '/partida/$id': typeof PartidaIdRoute
   '/puzzles/$username': typeof PuzzlesUsernameRoute
