@@ -65,6 +65,8 @@ function GamePage() {
   const [progress, setProgress] = useState<[number, number] | null>(null);
   const [engineInfo, setEngineInfo] = useState<EngineEval | null>(null);
   const [analysisError, setAnalysisError] = useState("");
+  const [analysisNotice, setAnalysisNotice] = useState("");
+  const activeAnalysis = useRef<{ controller: AbortController; engine: Engine } | null>(null);
   const [moves, setMoves] = useState<AnalyzedMove[] | null>(null);
   const [ply, setPly] = useState(0);
   const [running, setRunning] = useState(false);
@@ -77,28 +79,54 @@ function GamePage() {
   const myColor: "w" | "b" =
     g && user && g.players.black.user?.name.toLowerCase() === bareName(user) ? "b" : "w";
 
+  const stopAnalysis = () => {
+    const active = activeAnalysis.current;
+    if (!active) return;
+    active.controller.abort();
+    active.engine.terminate();
+  };
+
+  useEffect(() => {
+    return () => {
+      activeAnalysis.current?.controller.abort();
+      activeAnalysis.current?.engine.terminate();
+      activeAnalysis.current = null;
+    };
+  }, []);
+
   const run = async () => {
-    if (!g) return;
+    if (!g || activeAnalysis.current) return;
+    const controller = new AbortController();
     const nodeLimit = ANALYSIS_PROFILES[analysisLevel].nodes;
-    const totalPositions = g.moves.split(" ").filter(Boolean).length + 1;
+    const sanMoves = g.moves.split(" ").filter(Boolean);
     setRunning(true);
-    setMoves(null);
-    setProgress([0, totalPositions]);
+    // Mantém o último resultado completo disponível até a nova análise terminar.
+    setProgress([0, sanMoves.length + 1]);
     setEngineInfo(null);
     setAnalysisError("");
-    const engine = new Engine();
+    setAnalysisNotice("");
+
+    let engine: Engine | null = null;
     try {
+      engine = new Engine();
+      activeAnalysis.current = { controller, engine };
       const res = await analyzeGame(
-        g.moves.split(" ").filter(Boolean),
+        sanMoves,
         engine,
         nodeLimit,
         (done, total, info) => {
+          if (controller.signal.aborted) return;
           setProgress([done, total]);
           if (info) setEngineInfo(info);
         },
+        controller.signal,
       );
+      if (controller.signal.aborted) return;
       setMoves(res);
       setPly(0);
+      setRevealed(new Set());
+      setFeedback(null);
+      setTries(0);
       if (user) {
         const themes: Partial<Record<ErrorTheme, number>> = {};
         res.filter((m) => m.color === myColor && m.theme).forEach((m) => (themes[m.theme!] = (themes[m.theme!] ?? 0) + 1));
@@ -110,9 +138,14 @@ function GamePage() {
         );
       }
     } catch (error) {
-      setAnalysisError(error instanceof Error ? error.message : "Não foi possível concluir a análise.");
+      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
+        setAnalysisNotice("Análise interrompida. Nenhum resultado parcial foi salvo; análises anteriores permanecem disponíveis.");
+      } else {
+        setAnalysisError(error instanceof Error ? error.message : "Não foi possível concluir a análise.");
+      }
     } finally {
-      engine.terminate();
+      engine?.terminate();
+      if (activeAnalysis.current?.controller === controller) activeAnalysis.current = null;
       setRunning(false);
     }
   };
@@ -336,12 +369,35 @@ function GamePage() {
                 <p className="mt-3 text-xs text-muted-foreground">
                   {ANALYSIS_PROFILES[analysisLevel].description} Limite: {ANALYSIS_PROFILES[analysisLevel].nodes.toLocaleString("pt-BR")} nós por posição.
                 </p>
-                <button onClick={run} disabled={running} className="mt-4 w-full rounded-md bg-primary px-6 py-3 font-semibold text-primary-foreground disabled:opacity-60">
-                  {running ? `Analisando… ${progress ? Math.round((progress[0] / progress[1]) * 100) : 0}%` : moves ? "Reanalisar neste nível" : "Iniciar análise"}
-                </button>
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <button type="button" onClick={run} disabled={running} className="min-h-11 flex-1 rounded-md bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-60">
+                    {running ? `Analisando… ${progress ? Math.round((progress[0] / progress[1]) * 100) : 0}%` : moves ? "Reanalisar neste nível" : "Iniciar análise"}
+                  </button>
+                  {running && (
+                    <button
+                      type="button"
+                      onClick={stopAnalysis}
+                      className="min-h-11 rounded-md border border-border bg-background px-5 py-3 font-semibold transition hover:bg-accent"
+                    >
+                      Interromper análise
+                    </button>
+                  )}
+                </div>
+                {running && moves && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Você pode continuar consultando a última análise enquanto a nova é preparada.
+                  </p>
+                )}
                 {running && progress && (
                   <div className="mt-3">
-                    <div className="h-2 overflow-hidden rounded bg-muted">
+                    <div
+                      className="h-2 overflow-hidden rounded bg-muted"
+                      role="progressbar"
+                      aria-label="Progresso da análise"
+                      aria-valuemin={0}
+                      aria-valuemax={progress[1]}
+                      aria-valuenow={progress[0]}
+                    >
                       <div className="h-full bg-primary transition-all" style={{ width: `${(progress[0] / progress[1]) * 100}%` }} />
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
@@ -350,6 +406,7 @@ function GamePage() {
                     </p>
                   </div>
                 )}
+                {analysisNotice && <p role="status" className="mt-3 rounded-md border border-border bg-muted p-3 text-sm text-foreground">{analysisNotice}</p>}
                 {analysisError && <p role="alert" className="mt-3 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{analysisError}</p>}
               </div>
 
