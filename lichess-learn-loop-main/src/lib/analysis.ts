@@ -149,7 +149,10 @@ function evaluateWithCancellation(engine: Engine, fen: string, nodeLimit: number
   if (signal.aborted) return Promise.reject(cancellationError());
 
   return new Promise<EngineEval>((resolve, reject) => {
-    const onAbort = () => reject(cancellationError());
+    const onAbort = () => {
+      cleanup();
+      reject(cancellationError());
+    };
     const cleanup = () => signal.removeEventListener("abort", onAbort);
     signal.addEventListener("abort", onAbort, { once: true });
 
