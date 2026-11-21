@@ -10,9 +10,9 @@ O app conecta na sua conta do [Lichess](https://lichess.org/) ou do [Chess.com](
 ## Funcionalidades
 
 - Importa partidas do Lichess e do Chess.com pelo nome de usuário
-- Análise lance a lance com Stockfish 16, direto no navegador (sem servidor de análise)
+- Análise lance a lance com Stockfish 19 Lite, direto no navegador (sem servidor de análise)
 - Classificação de cada jogada: melhor, boa, imprecisão, erro e capivarada
-- Precisão da partida calculada no mesmo padrão do Lichess
+- Precisão da partida baseada na fórmula pública do Lichess e na agregação ponderada por volatilidade
 - Detecção de padrões de erro que se repetem, com puzzles de treino
 
 ## Stack
@@ -20,7 +20,7 @@ O app conecta na sua conta do [Lichess](https://lichess.org/) ou do [Chess.com](
 - [React 19](https://react.dev/) + [TanStack Start](https://tanstack.com/start) (SSR) e TanStack Router
 - [Tailwind CSS 4](https://tailwindcss.com/) com os componentes do shadcn/ui
 - [chess.js](https://github.com/jhlywa/chess.js) + [react-chessboard](https://github.com/Clariity/react-chessboard)
-- [Stockfish 16 NNUE](https://stockfishchess.org/) servido de `public/stockfish/`
+- [Stockfish 19 Lite (Stockfish.js 19.0.1, WebAssembly)](https://stockfishchess.org/) servido de `public/stockfish/`
 - Build de produção com [Nitro](https://nitro.build/) (saída em `.output/`)
 - Docker e [Render](https://render.com/) para o deploy
 

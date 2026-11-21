@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun scripts/download-stockfish.ts && vite dev",
-    "build": "bun scripts/download-stockfish.ts && vite build",
+    "build": "bun scripts/download-stockfish.ts && bun run test && vite build",
     "start": "node .output/server/index.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
