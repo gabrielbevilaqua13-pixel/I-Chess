@@ -6,12 +6,13 @@
   "type": "module",
   "scripts": {
     "dev": "bun scripts/download-stockfish.ts && vite dev",
-    "build": "bun scripts/download-stockfish.ts && bun run test && vite build",
+    "build": "bun scripts/download-stockfish.ts && bun run test:analysis && vite build",
     "start": "node .output/server/index.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:analysis": "vitest run src/test/analysis.test.ts"
   },
   "overrides": {
     "rolldown": "1.2.1"
