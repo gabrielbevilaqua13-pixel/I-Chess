@@ -18,6 +18,7 @@ import {
   ANALYSIS_PROFILES,
   type AnalysisLevel,
 } from "@/lib/analysis";
+import { analysisKey, readAnalysis, type SavedAnalysis } from "@/lib/saved-analysis";
 import { Board } from "@/components/Board";
 import { saveCloudStats } from "@/lib/cloud-stats";
 
@@ -58,7 +59,14 @@ function fmtEval(cp: number) {
 function GamePage() {
   const { id } = Route.useParams();
   const { user } = Route.useSearch();
-  const gameQ = useQuery({ queryKey: ["game", id], queryFn: () => fetchGame(id, user) });
+  return <GameReview key={analysisKey(id, user)} id={id} user={user} />;
+}
+
+function GameReview({ id, user }: { id: string; user: string | undefined }) {
+  const key = analysisKey(id, user);
+  const [restored, setRestored] = useState(false);
+  const [snapshot, setSnapshot] = useState<SavedAnalysis | null>(null);
+  const gameQ = useQuery({ queryKey: ["game", id, user ?? ""], queryFn: () => fetchGame(id, user), enabled: restored && !snapshot });
   const [analysisLevel, setAnalysisLevel] = useState<AnalysisLevel>("standard");
   const [flipped, setFlipped] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -75,7 +83,29 @@ function GamePage() {
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
 
 
-  const g = gameQ.data;
+  useEffect(() => {
+    const saved = readAnalysis(key, id);
+    if (saved) {
+      setSnapshot(saved.result);
+      setMoves(saved.result.moves);
+      setAnalysisLevel(saved.result.level);
+      setPly(saved.ply);
+      setRevealed(new Set(saved.revealed));
+      setAnalysisNotice("Análise retomada neste navegador.");
+    }
+    setRestored(true);
+  }, [key, id]);
+
+  useEffect(() => {
+    if (!snapshot || snapshot.moves !== moves) return;
+    try {
+      localStorage.setItem(key + ":position", JSON.stringify({ revision: snapshot.revision, ply, revealed: [...revealed] }));
+    } catch {
+      setAnalysisNotice("O navegador não conseguiu salvar a posição de leitura.");
+    }
+  }, [key, snapshot, moves, ply, revealed]);
+
+  const g = snapshot?.game ?? gameQ.data;
   const myColor: "w" | "b" =
     g && user && g.players.black.user?.name.toLowerCase() === bareName(user) ? "b" : "w";
 
@@ -122,6 +152,14 @@ function GamePage() {
         controller.signal,
       );
       if (controller.signal.aborted) return;
+      const completed = { revision: crypto.randomUUID(), game: g, level: analysisLevel, moves: res };
+      try {
+        localStorage.setItem(key, JSON.stringify(completed));
+        setSnapshot(completed);
+        setAnalysisNotice("Análise salva neste navegador.");
+      } catch {
+        setAnalysisNotice("O navegador não conseguiu salvar esta análise para a próxima visita.");
+      }
       setMoves(res);
       setPly(0);
       setRevealed(new Set());
@@ -230,8 +268,8 @@ function GamePage() {
       ) : (
         <Link to="/" className="text-sm text-primary">← Início</Link>
       )}
-      {gameQ.isLoading && <p className="mt-6 text-muted-foreground">Carregando partida…</p>}
-      {gameQ.isError && <p className="mt-6 text-destructive">Partida não encontrada.</p>}
+      {!g && (!restored || gameQ.isLoading) && <p className="mt-6 text-muted-foreground">Carregando partida…</p>}
+      {!g && gameQ.isError && <p className="mt-6 text-destructive">Partida não encontrada.</p>}
       {g && (
         <>
           <h1 className="mt-3 text-2xl font-bold sm:text-3xl">
