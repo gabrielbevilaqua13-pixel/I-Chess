@@ -1,7 +1,7 @@
 import { buildPuzzles, savePuzzles } from "@/lib/puzzles";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { bareName, fetchGame } from "@/lib/lichess";
 import { Engine, type EngineEval } from "@/lib/engine";
@@ -60,6 +60,8 @@ function GamePage() {
   const { user } = Route.useSearch();
   const gameQ = useQuery({ queryKey: ["game", id], queryFn: () => fetchGame(id, user) });
   const [analysisLevel, setAnalysisLevel] = useState<AnalysisLevel>("standard");
+  const [flipped, setFlipped] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState<[number, number] | null>(null);
   const [engineInfo, setEngineInfo] = useState<EngineEval | null>(null);
   const [analysisError, setAnalysisError] = useState("");
@@ -117,9 +119,17 @@ function GamePage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!moves) return;
-      if (e.key === "ArrowRight") setPly((p) => Math.min(moves.length, p + 1));
-      if (e.key === "ArrowLeft") setPly((p) => Math.max(0, p - 1));
+      if (!moves || e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setPly((p) => Math.min(moves.length, p + 1));
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setPly((p) => Math.max(0, p - 1));
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -158,6 +168,15 @@ function GamePage() {
   const sumMe = useMemo(() => (moves ? summarize(moves, myColor) : null), [moves, myColor]);
   const sumOpp = useMemo(() => (moves ? summarize(moves, myColor === "w" ? "b" : "w") : null), [moves, myColor]);
   const myErrors = moves?.filter((m) => m.color === myColor && m.theme) ?? [];
+  const reviewPlies = (moves ?? [])
+    .filter((m) => m.color === myColor && ["inaccuracy", "mistake", "blunder"].includes(m.judgment))
+    .map((m) => m.ply);
+  const previousError = [...reviewPlies].reverse().find((movePly) => movePly < ply);
+  const nextError = reviewPlies.find((movePly) => movePly > ply);
+  const reviewMove = (movePly: number) => {
+    setPly(movePly);
+    boardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const judgmentWeight: Record<Judgment, number> = {
     best: 0, good: 0, inaccuracy: 1, mistake: 2, blunder: 3,
   };
@@ -172,7 +191,7 @@ function GamePage() {
     .sort((a, b) => b.count - a.count || judgmentWeight[b.example.judgment] - judgmentWeight[a.example.judgment]);
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
+    <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       {user ? (
         <Link to="/jogador/$username" params={{ username: user }} className="text-sm text-primary">← Minhas partidas</Link>
       ) : (
@@ -182,28 +201,75 @@ function GamePage() {
       {gameQ.isError && <p className="mt-6 text-destructive">Partida não encontrada.</p>}
       {g && (
         <>
-          <h1 className="mt-3 text-3xl font-bold">
+          <h1 className="mt-3 text-2xl font-bold sm:text-3xl">
             {g.players.white.user?.name ?? "?"} <span className="text-muted-foreground">vs</span> {g.players.black.user?.name ?? "?"}
           </h1>
           <p className="text-sm text-muted-foreground">{g.opening?.name}</p>
 
-          <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,520px)_1fr]">
-            <div>
+          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,520px)_1fr] lg:gap-8">
+            <div ref={boardRef}>
               <Board
                 fen={fen}
-                orientation={myColor === "w" ? "white" : "black"}
+                orientation={(myColor === "w") !== flipped ? "white" : "black"}
                 arrows={arrows}
                 onDrop={isChallenge ? onDrop : undefined}
                 highlight={isChallenge && tries >= 2 && current?.bestUci ? [current.bestUci.slice(0, 2)] : []}
               />
               {moves && (
-                <div className="mt-3 flex justify-center gap-2">
-                  {[["⏮", 0], ["◀", ply - 1], ["▶", ply + 1], ["⏭", moves.length]].map(([l, v]) => (
-                    <button key={l as string} onClick={() => setPly(Math.max(0, Math.min(moves.length, v as number)))} className="rounded-md bg-secondary px-4 py-2 hover:bg-accent">
-                      {l}
+                <>
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2" aria-label="Navegação pela partida">
+                    {([
+                      ["⏮", 0, "Início da partida"],
+                      ["◀", ply - 1, "Lance anterior"],
+                      ["▶", ply + 1, "Próximo lance"],
+                      ["⏭", moves.length, "Fim da partida"],
+                    ] as const).map(([label, destination, description]) => (
+                      <button
+                        key={description}
+                        type="button"
+                        aria-label={description}
+                        title={description}
+                        disabled={destination < 0 || destination > moves.length || destination === ply}
+                        onClick={() => setPly(destination)}
+                        className="min-h-10 min-w-10 rounded-md bg-secondary px-3 py-2 transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFlipped((value) => !value)}
+                      className="min-h-10 rounded-md border border-border px-3 py-2 text-sm transition hover:bg-accent"
+                      aria-label="Virar tabuleiro"
+                      title="Virar tabuleiro"
+                    >
+                      ↻ Virar
                     </button>
-                  ))}
-                </div>
+                  </div>
+                  {reviewPlies.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        disabled={previousError === undefined}
+                        onClick={() => previousError !== undefined && setPly(previousError)}
+                        className="min-h-10 rounded-md border border-border px-3 py-2 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        ← Erro anterior
+                      </button>
+                      <span className="text-center text-xs text-muted-foreground" aria-live="polite">
+                        {reviewPlies.length} {reviewPlies.length === 1 ? "lance para revisar" : "lances para revisar"}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={nextError === undefined}
+                        onClick={() => nextError !== undefined && setPly(nextError)}
+                        className="min-h-10 rounded-md border border-border px-3 py-2 text-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Próximo erro →
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
               {feedback?.ok && !isChallenge && (
                 <p className="mt-4 rounded-lg border border-border bg-card p-3 text-sm font-semibold text-[color:var(--best)]">✓ {feedback.text}</p>
@@ -321,6 +387,9 @@ function GamePage() {
                         <p className="mt-2 text-xs text-muted-foreground">
                           Exemplo mais relevante: lance {Math.ceil(themeInsights[0]!.example.ply / 2)}{themeInsights[0]!.example.color === "w" ? "." : "..."} {themeInsights[0]!.example.san} ({J_LABEL[themeInsights[0]!.example.judgment].toLowerCase()}).
                         </p>
+                        <button type="button" onClick={() => reviewMove(themeInsights[0]!.example.ply)} className="mt-3 rounded-md border border-border px-3 py-2 text-sm font-semibold text-primary hover:bg-accent">
+                          Revisar este lance no tabuleiro
+                        </button>
                       </div>
                       <div className="mt-4 rounded-lg border border-border bg-card p-5">
                         <h2 className="text-xl">Lições desta partida</h2>
@@ -342,6 +411,7 @@ function GamePage() {
                               <p className="mt-2 text-xs text-muted-foreground">
                                 Exemplo: lance {Math.ceil(example.ply / 2)}{example.color === "w" ? "." : "..."} {example.san}; {related.filter((m) => m.judgment === "blunder").length} capivarada(s), {related.filter((m) => m.judgment === "mistake").length} erro(s) e {related.filter((m) => m.judgment === "inaccuracy").length} imprecisão(ões).
                               </p>
+                              <button type="button" onClick={() => reviewMove(example.ply)} className="mt-2 rounded-md border border-border px-3 py-2 font-semibold text-primary hover:bg-accent">Revisar lance</button>
                             </li>
                           ))}
                         </ul>
@@ -356,7 +426,7 @@ function GamePage() {
                           <span className="py-1 text-muted-foreground">{i + 1}.</span>
                           {[moves![i * 2], moves![i * 2 + 1]].map((m) =>
                             m ? (
-                              <button key={m.ply} onClick={() => setPly(m.ply)} className={`rounded px-2 py-1 text-left hover:bg-accent ${ply === m.ply ? "bg-accent" : ""}`}>
+                              <button key={m.ply} type="button" onClick={() => reviewMove(m.ply)} aria-current={ply === m.ply ? "step" : undefined} aria-label={`${Math.ceil(m.ply / 2)}${m.color === "w" ? "." : "..."} ${m.san}: ${J_LABEL[m.judgment]}`} className={`min-h-9 rounded px-2 py-1 text-left hover:bg-accent ${ply === m.ply ? "bg-accent" : ""}`}>
                                 {m.san}
                                 <span className={`ml-1 font-bold ${J_CLASS[m.judgment]}`}>{J_SYM[m.judgment]}</span>
                               </button>
