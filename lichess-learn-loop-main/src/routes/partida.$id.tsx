@@ -251,7 +251,7 @@ function GamePage() {
               <div className="rounded-lg border border-border bg-card p-6">
                 <h2 className="text-2xl">Analisar com Stockfish 19</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Motor Lite executado localmente no navegador. Cada posição recebe um limite de nós; a profundidade alcançada varia conforme a posição e o aparelho.
+                  Análise realizada diretamente no seu navegador. O computador examina milhares de possibilidades para encontrar as melhores jogadas. O nível de análise pode variar conforme a complexidade da posição.
                 </p>
                 <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="Intensidade da análise">
                   {(["quick", "standard", "deep"] as const).map((level) => (
