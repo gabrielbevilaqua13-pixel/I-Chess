@@ -43,7 +43,7 @@ function PuzzlesPage() {
       for (let i = 0; i < games.length; i++) {
         const g = games[i]!;
         const color = g.players.white.user?.name.toLowerCase() === bareName(username) ? "w" : "b";
-        const res = await analyzeGame(g.moves.split(" ").filter(Boolean), engine, 10, (d, t) =>
+        const res = await analyzeGame(g.moves.split(" ").filter(Boolean), engine, 45_000, (d, t) =>
           setGen(`Partida ${i + 1}/${games.length} · posição ${d}/${t}`),
         );
         savePuzzles(username, buildPuzzles(res, color, g.id));

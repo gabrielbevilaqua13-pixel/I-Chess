@@ -1,0 +1,22 @@
+# Stockfish.js third-party notice
+
+Mestre Interior distributes the unmodified **Stockfish.js 19.0.1 Lite, single-threaded WebAssembly** browser build.
+
+- Browser adapter: Nathan Rugg / Stockfish.js contributors
+- Upstream engine: Stockfish 19
+- Copyright notices: see the bundled `Copying.txt` and the header of the JavaScript worker.
+- License: GNU General Public License version 3 (GPL-3.0-or-later).
+- Stockfish.js source (matching tag): https://github.com/nmrugg/stockfish.js/tree/v19.0.1
+- Upstream Stockfish source: https://github.com/official-stockfish/Stockfish/tree/sf_19
+- Release assets: https://github.com/nmrugg/stockfish.js/releases/tag/v19.0.1
+
+The browser build uses the smaller "Lite" neural network. The upstream project notes that it is weaker than the full engine. It was selected because the two required files total approximately 1.9 MB, use one thread, and do not require cross-origin isolation. It must not be described as identical in strength to the full server-side Stockfish used by Lichess.
+
+The build script downloads the two files from the pinned upstream release and verifies their SHA-256 checksums before the production build:
+
+| File | SHA-256 |
+|---|---|
+| `stockfish-19-lite-single.js` | `ccb130d7ff29408531c47d859a49f91d59d4f482d05a53eb1a3231a4f624c91a` |
+| `stockfish-19-lite-single.wasm` | `ee4f115bdb2d32cadf96cada104a05b5ec257d7ad6f57582190b49bc71f096de` |
+
+The engine runs in a Web Worker inside the visitor's browser. Its evaluation output is used by Mestre Interior's analysis and training features.

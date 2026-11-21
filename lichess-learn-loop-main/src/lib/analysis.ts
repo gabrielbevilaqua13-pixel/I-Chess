@@ -3,6 +3,26 @@ import type { Engine, EngineEval } from "./engine";
 
 export type Judgment = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
 
+export type AnalysisLevel = "quick" | "standard" | "deep";
+
+export const ANALYSIS_PROFILES: Record<AnalysisLevel, { label: string; nodes: number; description: string }> = {
+  quick: {
+    label: "Rápida",
+    nodes: 75_000,
+    description: "Boa para uma primeira leitura, com menor tempo de espera.",
+  },
+  standard: {
+    label: "Padrão",
+    nodes: 250_000,
+    description: "Equilíbrio entre tempo de processamento e qualidade da busca.",
+  },
+  deep: {
+    label: "Profunda",
+    nodes: 750_000,
+    description: "Examina muito mais posições; pode levar vários minutos em partidas longas.",
+  },
+};
+
 export type AnalyzedMove = {
   ply: number;
   san: string;
@@ -72,8 +92,12 @@ export function winPct(cp: number) {
 }
 
 export function moveAccuracy(wpBefore: number, wpAfter: number) {
-  const a = 103.1668 * Math.exp(-0.04354 * (wpBefore - wpAfter)) - 3.1669;
-  return Math.max(0, Math.min(100, a));
+  // Lichess' current formula, including its +1 uncertainty bonus.
+  const accuracy =
+    103.1668100711649 * Math.exp(-0.04354415386753951 * (wpBefore - wpAfter)) -
+    3.166924740191411 +
+    1;
+  return Math.max(0, Math.min(100, accuracy));
 }
 
 function uciToMove(fen: string, uci: string): Move | null {
@@ -113,8 +137,8 @@ function classify(drop: number): Judgment {
 export async function analyzeGame(
   sanMoves: string[],
   engine: Engine,
-  depth: number,
-  onProgress: (done: number, total: number) => void,
+  nodeLimit: number,
+  onProgress: (done: number, total: number, info?: EngineEval | null) => void,
 ): Promise<AnalyzedMove[]> {
   const chess = new Chess();
   const fens: string[] = [chess.fen()];
@@ -133,18 +157,19 @@ export async function analyzeGame(
     let best: string | null = null;
     let pv: string[] = [];
     let mate: number | null = null;
+    let engineInfo: EngineEval | null = null;
     if (c.isCheckmate()) cp = c.turn() === "w" ? -MATE_CP : MATE_CP;
     else if (c.isDraw() || c.isStalemate()) cp = 0;
     else {
-      const e = await engine.evaluate(fens[i]!, depth);
-      const stm = toCp(e);
+      engineInfo = await engine.evaluate(fens[i]!, nodeLimit);
+      const stm = toCp(engineInfo);
       cp = c.turn() === "w" ? stm : -stm;
-      best = e.best;
-      pv = e.pv;
-      mate = e.mate === null ? null : c.turn() === "w" ? e.mate : -e.mate;
+      best = engineInfo.best;
+      pv = engineInfo.pv;
+      mate = engineInfo.mate === null ? null : c.turn() === "w" ? engineInfo.mate : -engineInfo.mate;
     }
     evals.push({ cp, best, pv, mate });
-    onProgress(i + 1, fens.length);
+    onProgress(i + 1, fens.length, engineInfo);
   }
 
   return moves.map((m, i) => {
@@ -399,9 +424,56 @@ export function avoidAdvice(m: AnalyzedMove): string | null {
   }
 }
 
+/** Lichess-style game accuracy: volatility-weighted mean + harmonic mean. */
+export function gameAccuracyFromEvals(
+  whiteCentipawns: number[],
+  moveColors: Array<"w" | "b">,
+  color: "w" | "b",
+): number {
+  if (whiteCentipawns.length < 2 || moveColors.length !== whiteCentipawns.length - 1) return 0;
+
+  const winPercents = whiteCentipawns.map(winPct);
+  const windowSize = Math.max(2, Math.min(8, Math.floor((whiteCentipawns.length - 1) / 10)));
+  const windows: number[][] = [];
+
+  for (let i = 0; i < Math.max(0, Math.min(windowSize, winPercents.length) - 2); i++) {
+    windows.push(winPercents.slice(0, windowSize));
+  }
+  for (let i = 0; i <= winPercents.length - windowSize; i++) {
+    windows.push(winPercents.slice(i, i + windowSize));
+  }
+
+  const weights = windows.map((window) => {
+    const mean = window.reduce((sum, value) => sum + value, 0) / window.length;
+    const variance = window.reduce((sum, value) => sum + (value - mean) ** 2, 0) / window.length;
+    return Math.max(0.5, Math.min(12, Math.sqrt(variance)));
+  });
+
+  const accuracies: Array<{ accuracy: number; weight: number }> = [];
+  for (let i = 0; i < moveColors.length; i++) {
+    if (moveColors[i] !== color) continue;
+    const sign = color === "w" ? 1 : -1;
+    const before = winPct(sign * whiteCentipawns[i]!);
+    const after = winPct(sign * whiteCentipawns[i + 1]!);
+    accuracies.push({ accuracy: moveAccuracy(before, after), weight: weights[i] ?? 0.5 });
+  }
+  if (accuracies.length === 0) return 0;
+
+  const totalWeight = accuracies.reduce((sum, item) => sum + item.weight, 0);
+  const weightedMean = accuracies.reduce((sum, item) => sum + item.accuracy * item.weight, 0) / totalWeight;
+  const harmonicMean = accuracies.some((item) => item.accuracy <= 0)
+    ? 0
+    : accuracies.length / accuracies.reduce((sum, item) => sum + 1 / item.accuracy, 0);
+
+  return (weightedMean + harmonicMean) / 2;
+}
+
 export function summarize(moves: AnalyzedMove[], color: "w" | "b") {
   const mine = moves.filter((m) => m.color === color);
-  const acc = mine.length ? mine.reduce((s, m) => s + m.accuracy, 0) / mine.length : 0;
+  const positionEvals = moves.length
+    ? [moves[0]!.evalBefore, ...moves.map((move) => move.evalAfter)]
+    : [];
+  const acc = gameAccuracyFromEvals(positionEvals, moves.map((move) => move.color), color);
   const count = (j: Judgment) => mine.filter((m) => m.judgment === j).length;
   return {
     accuracy: acc,

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { bareName, fetchGame } from "@/lib/lichess";
-import { Engine } from "@/lib/engine";
+import { Engine, type EngineEval } from "@/lib/engine";
 import {
   analyzeGame,
   saveGameStats,
@@ -15,6 +15,8 @@ import {
   type AnalyzedMove,
   type ErrorTheme,
   type Judgment,
+  ANALYSIS_PROFILES,
+  type AnalysisLevel,
 } from "@/lib/analysis";
 import { Board } from "@/components/Board";
 import { saveCloudStats } from "@/lib/cloud-stats";
@@ -57,8 +59,10 @@ function GamePage() {
   const { id } = Route.useParams();
   const { user } = Route.useSearch();
   const gameQ = useQuery({ queryKey: ["game", id], queryFn: () => fetchGame(id, user) });
-  const [depth, setDepth] = useState(12);
+  const [analysisLevel, setAnalysisLevel] = useState<AnalysisLevel>("standard");
   const [progress, setProgress] = useState<[number, number] | null>(null);
+  const [engineInfo, setEngineInfo] = useState<EngineEval | null>(null);
+  const [analysisError, setAnalysisError] = useState("");
   const [moves, setMoves] = useState<AnalyzedMove[] | null>(null);
   const [ply, setPly] = useState(0);
   const [running, setRunning] = useState(false);
@@ -73,11 +77,24 @@ function GamePage() {
 
   const run = async () => {
     if (!g) return;
+    const nodeLimit = ANALYSIS_PROFILES[analysisLevel].nodes;
+    const totalPositions = g.moves.split(" ").filter(Boolean).length + 1;
     setRunning(true);
     setMoves(null);
+    setProgress([0, totalPositions]);
+    setEngineInfo(null);
+    setAnalysisError("");
     const engine = new Engine();
     try {
-      const res = await analyzeGame(g.moves.split(" ").filter(Boolean), engine, depth, (d, t) => setProgress([d, t]));
+      const res = await analyzeGame(
+        g.moves.split(" ").filter(Boolean),
+        engine,
+        nodeLimit,
+        (done, total, info) => {
+          setProgress([done, total]);
+          if (info) setEngineInfo(info);
+        },
+      );
       setMoves(res);
       setPly(0);
       if (user) {
@@ -90,6 +107,8 @@ function GamePage() {
           console.warn("A análise foi mantida neste dispositivo, mas não sincronizou com a nuvem.", error),
         );
       }
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "Não foi possível concluir a análise.");
     } finally {
       engine.terminate();
       setRunning(false);
@@ -229,24 +248,44 @@ function GamePage() {
             </div>
 
             <div>
-              {!moves && (
-                <div className="rounded-lg border border-border bg-card p-6">
-                  <h2 className="text-2xl">Analisar com Stockfish</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">A análise roda no seu navegador. Profundidade maior = mais precisa, porém mais lenta.</p>
-                  <label className="mt-4 block text-sm">
-                    Profundidade: <b>{depth}</b>
-                    <input type="range" min={8} max={18} value={depth} onChange={(e) => setDepth(+e.target.value)} disabled={running} className="mt-2 w-full accent-primary" />
-                  </label>
-                  <button onClick={run} disabled={running} className="mt-4 w-full rounded-md bg-primary px-6 py-3 font-semibold text-primary-foreground disabled:opacity-60">
-                    {running ? `Analisando… ${progress ? Math.round((progress[0] / progress[1]) * 100) : 0}%` : "Iniciar análise"}
-                  </button>
-                  {running && progress && (
-                    <div className="mt-3 h-2 overflow-hidden rounded bg-muted">
+              <div className="rounded-lg border border-border bg-card p-6">
+                <h2 className="text-2xl">Analisar com Stockfish 19</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Motor Lite executado localmente no navegador. Cada posição recebe um limite de nós; a profundidade alcançada varia conforme a posição e o aparelho.
+                </p>
+                <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="Intensidade da análise">
+                  {(["quick", "standard", "deep"] as const).map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      onClick={() => setAnalysisLevel(level)}
+                      disabled={running}
+                      aria-pressed={analysisLevel === level}
+                      className={`rounded-md border px-2 py-2 text-sm font-semibold transition disabled:opacity-60 ${analysisLevel === level ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+                    >
+                      {ANALYSIS_PROFILES[level].label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {ANALYSIS_PROFILES[analysisLevel].description} Limite: {ANALYSIS_PROFILES[analysisLevel].nodes.toLocaleString("pt-BR")} nós por posição.
+                </p>
+                <button onClick={run} disabled={running} className="mt-4 w-full rounded-md bg-primary px-6 py-3 font-semibold text-primary-foreground disabled:opacity-60">
+                  {running ? `Analisando… ${progress ? Math.round((progress[0] / progress[1]) * 100) : 0}%` : moves ? "Reanalisar neste nível" : "Iniciar análise"}
+                </button>
+                {running && progress && (
+                  <div className="mt-3">
+                    <div className="h-2 overflow-hidden rounded bg-muted">
                       <div className="h-full bg-primary transition-all" style={{ width: `${(progress[0] / progress[1]) * 100}%` }} />
                     </div>
-                  )}
-                </div>
-              )}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Posição {progress[0]} de {progress[1]}
+                      {engineInfo ? ` · profundidade ${engineInfo.depth} · ${engineInfo.nodes.toLocaleString("pt-BR")} nós` : ""}
+                    </p>
+                  </div>
+                )}
+                {analysisError && <p role="alert" className="mt-3 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{analysisError}</p>}
+              </div>
 
               {sumMe && sumOpp && (
                 <>
@@ -329,7 +368,7 @@ function GamePage() {
                       ))}
                     </div>
                   </div>
-                  <button onClick={run} className="mt-3 text-sm text-primary">Analisar novamente</button>
+
                 </>
               )}
             </div>
