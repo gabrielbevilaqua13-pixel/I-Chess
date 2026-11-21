@@ -134,12 +134,51 @@ function classify(drop: number): Judgment {
   return "best";
 }
 
+function cancellationError() {
+  return new DOMException("A análise foi interrompida.", "AbortError");
+}
+
+function checkCancellation(signal?: AbortSignal) {
+  if (signal?.aborted) throw cancellationError();
+}
+
+// Libera a espera imediatamente quando o usuário cancela, mesmo que o motor
+// ainda esteja inicializando ou calculando uma posição.
+function evaluateWithCancellation(engine: Engine, fen: string, nodeLimit: number, signal?: AbortSignal): Promise<EngineEval> {
+  if (!signal) return engine.evaluate(fen, nodeLimit);
+  if (signal.aborted) return Promise.reject(cancellationError());
+
+  return new Promise<EngineEval>((resolve, reject) => {
+    const onAbort = () => reject(cancellationError());
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    if (signal.aborted) {
+      cleanup();
+      reject(cancellationError());
+      return;
+    }
+
+    try {
+      engine.evaluate(fen, nodeLimit).then(
+        (value) => { cleanup(); resolve(value); },
+        (error: unknown) => { cleanup(); reject(error); },
+      );
+    } catch (error) {
+      cleanup();
+      reject(error);
+    }
+  });
+}
+
 export async function analyzeGame(
   sanMoves: string[],
   engine: Engine,
   nodeLimit: number,
   onProgress: (done: number, total: number, info?: EngineEval | null) => void,
+  signal?: AbortSignal,
 ): Promise<AnalyzedMove[]> {
+  checkCancellation(signal);
   const chess = new Chess();
   const fens: string[] = [chess.fen()];
   const moves: Move[] = [];
@@ -152,6 +191,7 @@ export async function analyzeGame(
   // Evaluate every position (white POV)
   const evals: { cp: number; best: string | null; pv: string[]; mate: number | null }[] = [];
   for (let i = 0; i < fens.length; i++) {
+    checkCancellation(signal);
     const c = new Chess(fens[i]!);
     let cp: number;
     let best: string | null = null;
@@ -161,17 +201,20 @@ export async function analyzeGame(
     if (c.isCheckmate()) cp = c.turn() === "w" ? -MATE_CP : MATE_CP;
     else if (c.isDraw() || c.isStalemate()) cp = 0;
     else {
-      engineInfo = await engine.evaluate(fens[i]!, nodeLimit);
+      engineInfo = await evaluateWithCancellation(engine, fens[i]!, nodeLimit, signal);
+      checkCancellation(signal);
       const stm = toCp(engineInfo);
       cp = c.turn() === "w" ? stm : -stm;
       best = engineInfo.best;
       pv = engineInfo.pv;
       mate = engineInfo.mate === null ? null : c.turn() === "w" ? engineInfo.mate : -engineInfo.mate;
     }
+    checkCancellation(signal);
     evals.push({ cp, best, pv, mate });
     onProgress(i + 1, fens.length, engineInfo);
   }
 
+  checkCancellation(signal);
   return moves.map((m, i) => {
     const color = m.color;
     const sign = color === "w" ? 1 : -1;
