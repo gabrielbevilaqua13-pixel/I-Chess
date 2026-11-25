@@ -98,6 +98,7 @@ function storeSession(session: AuthSession | null) {
   if (typeof window === "undefined") return;
   if (session) localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   else localStorage.removeItem(SESSION_KEY);
+  window.dispatchEvent(new Event("mestre-session"));
 }
 
 async function authRequest(path: string, body: Record<string, unknown>) {
@@ -239,4 +240,19 @@ export async function restoreSessionFromUrl(): Promise<boolean> {
     console.error("Falha ao restaurar a sessão após confirmação de e-mail.", error);
     return false;
   }
+}
+
+export async function rememberProfile(profile: string, owner: string) {
+  const session = await getSession();
+  if (session?.user.id !== owner) throw new Error("Entre novamente para escolher seu perfil.");
+  const response = await fetch(getSupabaseConfig().url + "/auth/v1/user", {
+    method: "PUT",
+    headers: headers(session.access_token),
+    body: JSON.stringify({ data: { chess_profile: profile } }),
+  });
+  if (!response.ok) throw new Error("Não foi possível salvar o perfil. Tente novamente.");
+  const user = await response.json() as AuthUser;
+  const current = getStoredSession();
+  if (current?.user.id !== owner || user.id !== owner) throw new Error("Sua sessão mudou.");
+  storeSession({ ...current, user });
 }

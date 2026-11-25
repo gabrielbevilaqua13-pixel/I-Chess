@@ -4,13 +4,15 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { type ReactNode, useEffect } from "react";
-import { initializeAuthConfig, restoreSessionFromUrl } from "@/lib/auth";
+import { type ReactNode, useEffect, useState } from "react";
+import { initializeAuthConfig, restoreSessionFromUrl, getSession, type AuthSession } from "@/lib/auth";
 
+import { SessionContext } from "@/lib/session-context";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -119,14 +121,33 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  const path = useRouterState({ select: state => state.location.pathname });
+  const [session, setSession] = useState<AuthSession | null | undefined>(undefined);
   useEffect(() => {
-    void initializeAuthConfig().then(() => restoreSessionFromUrl());
+    let active = true;
+    let generation = 0;
+    const refresh = async () => {
+      const current = ++generation;
+      const value = await getSession();
+      if (active && current === generation) setSession(value);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || event.key === "mestre-interior:auth-session") void refresh();
+    };
+    window.addEventListener("mestre-session", refresh);
+    window.addEventListener("storage", onStorage);
+    void initializeAuthConfig().then(restoreSessionFromUrl).then(refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("mestre-session", refresh);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      {session === undefined && path !== "/" ? <p role="status" className="p-6">Abrindo Mestre Interior…</p> :
+        <SessionContext.Provider value={session ?? null} key={session?.user.id ?? "guest"}><Outlet /></SessionContext.Provider>}
     </QueryClientProvider>
   );
 }

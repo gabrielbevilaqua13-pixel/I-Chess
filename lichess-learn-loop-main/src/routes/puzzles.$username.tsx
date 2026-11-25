@@ -1,3 +1,4 @@
+import { useSession, playerStorageId } from "@/lib/session-context";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Chess } from "chess.js";
@@ -21,19 +22,25 @@ export const Route = createFileRoute("/puzzles/$username")({
 
 function PuzzlesPage() {
   const { username } = Route.useParams();
+  const owner = useSession()?.user.id;
+  if (!owner) return <main className="mx-auto max-w-lg p-8"><h1 className="text-2xl">Exercícios das suas partidas</h1><p className="my-4">Entre para criar exercícios e guardar seu progresso.</p><Link to="/login" className="text-primary">Entrar ou criar conta</Link></main>;
+  return <PlayerPuzzles key={username} username={username} storageId={playerStorageId(owner, username)} />;
+}
+
+function PlayerPuzzles({ username, storageId }: { username: string; storageId: string }) {
   const [puzzles, setPuzzles] = useState<Puzzle[]>([]);
   const [solved, setSolved] = useState<string[]>([]);
   const [idx, setIdx] = useState(0);
   const [gen, setGen] = useState<string | null>(null);
 
   useEffect(() => {
-    const ps = loadPuzzles(username);
-    const s = loadSolved(username);
+    const ps = loadPuzzles(storageId);
+    const s = loadSolved(storageId);
     setPuzzles(ps);
     setSolved(s);
     const first = ps.findIndex((p) => !s.includes(p.id));
     setIdx(first < 0 ? 0 : first);
-  }, [username]);
+  }, [storageId]);
 
   const generate = async () => {
     setGen("Baixando partidas do Lichess…");
@@ -46,9 +53,9 @@ function PuzzlesPage() {
         const res = await analyzeGame(g.moves.split(" ").filter(Boolean), engine, 45_000, (d, t) =>
           setGen(`Partida ${i + 1}/${games.length} · posição ${d}/${t}`),
         );
-        savePuzzles(username, buildPuzzles(res, color, g.id));
+        savePuzzles(storageId, buildPuzzles(res, color, g.id));
       }
-      const ps = loadPuzzles(username);
+      const ps = loadPuzzles(storageId);
       setPuzzles(ps);
       const first = ps.findIndex((p) => !solved.includes(p.id));
       setIdx(first < 0 ? 0 : first);
@@ -86,7 +93,7 @@ function PuzzlesPage() {
           <Solver
             key={p.id}
             puzzle={p}
-            onSolved={() => { markSolved(username, p.id); setSolved(loadSolved(username)); }}
+            onSolved={() => { markSolved(storageId, p.id); setSolved(loadSolved(storageId)); }}
             onNext={() => setIdx((i) => Math.min(puzzles.length - 1, i + 1))}
             number={idx + 1}
           />

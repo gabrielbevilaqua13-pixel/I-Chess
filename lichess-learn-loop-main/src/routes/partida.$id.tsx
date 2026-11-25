@@ -1,3 +1,4 @@
+import { useSession, playerStorageId } from "@/lib/session-context";
 import { buildPuzzles, savePuzzles } from "@/lib/puzzles";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -63,7 +64,8 @@ function GamePage() {
 }
 
 function GameReview({ id, user }: { id: string; user: string | undefined }) {
-  const key = analysisKey(id, user);
+  const owner = useSession()?.user.id;
+  const key = JSON.stringify([owner, analysisKey(id, user)]);
   const [restored, setRestored] = useState(false);
   const [snapshot, setSnapshot] = useState<SavedAnalysis | null>(null);
   const gameQ = useQuery({ queryKey: ["game", id, user ?? ""], queryFn: () => fetchGame(id, user), enabled: restored && !snapshot });
@@ -84,7 +86,7 @@ function GameReview({ id, user }: { id: string; user: string | undefined }) {
 
 
   useEffect(() => {
-    const saved = readAnalysis(key, id);
+    const saved = owner ? readAnalysis(key, id) : null;
     if (saved) {
       setSnapshot(saved.result);
       setMoves(saved.result.moves);
@@ -94,7 +96,7 @@ function GameReview({ id, user }: { id: string; user: string | undefined }) {
       setAnalysisNotice("Análise retomada neste navegador.");
     }
     setRestored(true);
-  }, [key, id]);
+  }, [key, id, owner]);
 
   useEffect(() => {
     if (!snapshot || snapshot.moves !== moves) return;
@@ -153,31 +155,35 @@ function GameReview({ id, user }: { id: string; user: string | undefined }) {
       );
       if (controller.signal.aborted) return;
       const completed = { revision: crypto.randomUUID(), game: g, level: analysisLevel, moves: res };
-      try {
-        localStorage.setItem(key, JSON.stringify(completed));
-        setSnapshot(completed);
-        setAnalysisNotice("Análise salva neste navegador.");
-      } catch {
-        setAnalysisNotice("O navegador não conseguiu salvar esta análise para a próxima visita.");
+      if (owner) {
+        try {
+          localStorage.setItem(key, JSON.stringify(completed));
+          setSnapshot(completed);
+          setAnalysisNotice("Análise salva neste navegador.");
+        } catch {
+          setAnalysisNotice("O navegador não conseguiu salvar esta análise para a próxima visita.");
+        }
+      } else {
+        setAnalysisNotice("Modo visitante. Esta análise fica disponível até você sair da partida ou recarregar a página.");
       }
       setMoves(res);
       setPly(0);
       setRevealed(new Set());
       setFeedback(null);
       setTries(0);
-      if (user) {
+      if (user && owner) {
         const themes: Partial<Record<ErrorTheme, number>> = {};
         res.filter((m) => m.color === myColor && m.theme).forEach((m) => (themes[m.theme!] = (themes[m.theme!] ?? 0) + 1));
-        savePuzzles(user, buildPuzzles(res, myColor, id));
+        savePuzzles(playerStorageId(owner, user), buildPuzzles(res, myColor, id));
         const storedGame = { id, accuracy: summarize(res, myColor).accuracy, themes, date: Date.now() };
-        saveGameStats(user, storedGame);
+        saveGameStats(playerStorageId(owner, user), storedGame);
         saveCloudStats(user, storedGame).catch((error) =>
           console.warn("A análise foi mantida neste dispositivo, mas não sincronizou com a nuvem.", error),
         );
       }
     } catch (error) {
       if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
-        setAnalysisNotice("Análise interrompida. Nenhum resultado parcial foi salvo; análises anteriores permanecem disponíveis.");
+        setAnalysisNotice("Análise interrompida.");
       } else {
         setAnalysisError(error instanceof Error ? error.message : "Não foi possível concluir a análise.");
       }

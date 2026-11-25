@@ -89,15 +89,14 @@ function ccToGame(g: CCGame): LichessGame | null {
   };
 }
 
-const CC_CACHE = "xadrez-coach:ccgames";
-function cacheGames(gs: LichessGame[]) {
-  try {
-    const cur = JSON.parse(localStorage.getItem(CC_CACHE) ?? "{}");
-    gs.forEach((g) => (cur[g.id] = g));
-    const keys = Object.keys(cur);
-    keys.slice(0, Math.max(0, keys.length - 300)).forEach((k) => delete cur[k]);
-    localStorage.setItem(CC_CACHE, JSON.stringify(cur));
-  } catch { /* ignore */ }
+const recentGames = new Map<string, LichessGame>();
+function cacheGames(games: LichessGame[]) {
+  if (typeof window === "undefined") return;
+  for (const game of games) recentGames.set(game.id, game);
+  for (const id of recentGames.keys()) {
+    if (recentGames.size <= 300) break;
+    recentGames.delete(id);
+  }
 }
 
 async function fetchCCUser(username: string) {
@@ -147,7 +146,7 @@ export function fetchGames(username: string, max = 20) {
 }
 export async function fetchGame(id: string, user?: string): Promise<LichessGame> {
   if (!id.startsWith("cc")) return fetchLichessGame(id);
-  const cached = JSON.parse(localStorage.getItem(CC_CACHE) ?? "{}")[id];
+  const cached = recentGames.get(id);
   if (cached) return cached;
   if (user && isChessCom(user)) {
     const found = (await fetchCCGames(user, 100)).find((g) => g.id === id);

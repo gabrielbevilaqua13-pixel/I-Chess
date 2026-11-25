@@ -1,3 +1,4 @@
+import { useSession, playerStorageId } from "@/lib/session-context";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -19,12 +20,14 @@ export const Route = createFileRoute("/jogador/$username")({
 
 function Player() {
   const { username } = Route.useParams();
+  const owner = useSession()?.user.id;
   const userQ = useQuery({ queryKey: ["user", username], queryFn: () => fetchUser(username) });
   const gamesQ = useQuery({ queryKey: ["games", username], queryFn: () => fetchGames(username) });
   const [stats, setStats] = useState<StoredGame[]>([]);
   useEffect(() => {
     let active = true;
-    const localStats = loadStats(username);
+    if (!owner) return;
+    const localStats = loadStats(playerStorageId(owner, username));
     setStats(localStats);
     loadCloudStats(username)
       .then((cloudStats) => {
@@ -34,7 +37,7 @@ function Player() {
       })
       .catch((error) => console.warn("Não foi possível sincronizar o histórico na nuvem.", error));
     return () => { active = false; };
-  }, [username]);
+  }, [username, owner]);
 
   const orderedStats = [...stats].sort((a, b) => b.date - a.date);
   const recentStats = orderedStats.slice(0, 5);
@@ -60,7 +63,8 @@ function Player() {
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <div className="flex justify-between"><Link to="/" className="text-sm text-primary">← Trocar conta</Link><Link to="/puzzles/$username" params={{ username }} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">♞ Puzzles</Link></div>
+      <div className="flex justify-between"><Link to="/" search={{ modo: "perfil" }} className="text-sm text-primary">← Trocar perfil</Link>{owner ? <Link to="/puzzles/$username" params={{ username }} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">♞ Puzzles</Link> : <Link to="/login" className="text-sm text-primary">Entrar ou criar conta</Link>}</div>
+      <p className="mt-6 text-sm text-muted-foreground">{owner ? "Minhas partidas" : "Modo visitante · As análises não são salvas."}</p>
       {userQ.isError ? (
         <p className="mt-10 text-destructive">Usuário não encontrado.</p>
       ) : (

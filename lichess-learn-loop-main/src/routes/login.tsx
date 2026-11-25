@@ -38,7 +38,7 @@ function LoginPage() {
       if (mode === "signup") {
         const result = await signUp(email.trim(), password);
         if (result.access_token) {
-          setMessage("Conta criada e acesso liberado. Bem-vindo ao Mestre Interior!");
+          await navigate({ to: "/" });
         } else {
           setMessage("Cadastro recebido! Verifique seu e-mail para confirmar a conta e depois entre.");
           setMode("signin");
